@@ -20,4 +20,12 @@ const passwordChanged = (firstName) => ({
   text: `Hi ${firstName}, your password was changed successfully. If this wasn't you, contact support immediately.`,
 });
 
-module.exports = { loginAlert, passwordChanged };
+const otpMail = (otp) => ({
+  subject: "Your CueRank verification code",
+  html: `<p>Your verification code is:</p>
+         <h2 style="letter-spacing:4px">${escapeHtml(otp)}</h2>
+         <p>It expires in 10 minutes. If you didn't request it, you can ignore this email.</p>`,
+  text: `Your CueRank verification code is ${otp}. It expires in 10 minutes.`,
+});
+
+module.exports = { loginAlert, passwordChanged,otpMail };

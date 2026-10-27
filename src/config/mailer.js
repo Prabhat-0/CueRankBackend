@@ -1,39 +1,25 @@
 const nodemailer = require("nodemailer");
 
-const host = process.env.SMTP_HOST?.trim();
-const portValue = process.env.SMTP_PORT?.trim();
-const port = portValue ? Number(portValue) : 587;
-const user = process.env.SMTP_USER?.trim();
-const pass = process.env.SMTP_PASS;
-const hasUser = Boolean(user);
-const hasPass = Boolean(pass);
-const errors = [];
+const required = ["SMTP_HOST", "SMTP_USER", "SMTP_PASS", "MAIL_FROM"];
+const missing = required.filter((key) => !process.env[key]);
 
-if (!host) {
-  errors.push("SMTP_HOST is required");
-}
-if (!Number.isInteger(port) || port < 1 || port > 65535) {
-  errors.push("SMTP_PORT must be a valid port number");
-}
-if (!process.env.MAIL_FROM?.trim()) {
-  errors.push("MAIL_FROM is required");
-}
-if (hasUser !== hasPass) {
-  errors.push("SMTP_USER and SMTP_PASS must both be provided or both omitted");
+let transporter = null;
+let configurationError = null;
+
+if (missing.length > 0) {
+  configurationError = `missing ${missing.join(", ")} in .env`;
+} else {
+  const port = Number(process.env.SMTP_PORT) || 465;
+
+  transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port,
+    secure: port === 465,   // true for 465 (SSL), false for 587 (STARTTLS)
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
 }
 
-const isConfigured = errors.length === 0;
-const transporter = host && Number.isInteger(port) && port >= 1 && port <= 65535 && hasUser === hasPass
-  ? nodemailer.createTransport({
-      host,
-      port,
-      secure: port === 465,
-      ...(hasUser ? { auth: { user, pass } } : {}),
-    })
-  : null;
-
-module.exports = {
-  transporter,
-  isConfigured,
-  configurationError: errors.join("; "),
-};
+module.exports = { transporter, configurationError };
