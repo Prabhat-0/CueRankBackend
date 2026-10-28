@@ -8,6 +8,7 @@ const db = require("../models");
 const app=express();
 const PORT=process.env.PORT || 3000;
 const { transporter, configurationError } = require("./config/mailer");
+const clubRouter = require("./routes/club.route");
 
 if (configurationError) {
   console.log("Mail not configured:", configurationError);
@@ -22,6 +23,7 @@ app.use(cookieParser());
 
 
 app.use("/api/v1",userRouter);
+app.use("/api/v1",clubRouter);
 
 app.listen(PORT,()=>{
     console.log("app is successfully running on Port :- ",PORT)

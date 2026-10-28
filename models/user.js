@@ -52,7 +52,8 @@ module.exports = (sequelize, DataTypes) => {
   }, {
     sequelize,
     modelName: 'User',   // table automatically "Users" banega
-    tableName: 'Users'   // optional, but safe: migration wale naam se exact match
+    tableName: 'Users', // optional, but safe: migration wale naam se exact match
+    timestamps:true  
   });
 
   return User;
