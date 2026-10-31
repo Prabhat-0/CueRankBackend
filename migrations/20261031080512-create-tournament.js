@@ -1,163 +1,191 @@
-
 'use strict';
 
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.createTable('Tournaments', {
-      id: {
-        type: Sequelize.INTEGER,
-        allowNull: false,
-        autoIncrement: true,
-        primaryKey: true,
-      },
-
-      clubId: {
-        type: Sequelize.INTEGER,
-        allowNull: false,
-        references: {
-          model: 'clubs',
-          key: 'id',
+    await queryInterface.sequelize.transaction(async (t) => {
+      await queryInterface.createTable(
+        'Tournaments',
+        {
+          id: {
+            type: Sequelize.INTEGER,
+            allowNull: false,
+            autoIncrement: true,
+            primaryKey: true,
+          },
+          clubId: {
+            type: Sequelize.INTEGER,
+            allowNull: false,
+            references: { model: 'Clubs', key: 'id' },
+            onUpdate: 'CASCADE',
+            onDelete: 'RESTRICT',
+          },
+          tournamentName: {
+            type: Sequelize.STRING(100),
+            allowNull: false,
+          },
+          tournamentBannerUrl: {
+            type: Sequelize.STRING,
+            allowNull: true,
+          },
+          tables: {
+            type: Sequelize.INTEGER,
+            allowNull: true,
+          },
+          registrationAmount: {
+            type: Sequelize.INTEGER,
+            allowNull: false,
+            defaultValue: 0,
+          },
+          venueName: {
+            type: Sequelize.STRING(100),
+            allowNull: false,
+          },
+          venueAddress: {
+            type: Sequelize.STRING(400),
+            allowNull: false,
+          },
+          gender: {
+            type: Sequelize.ENUM('Male', 'Female', 'Others'),
+            allowNull: false,
+            defaultValue: 'Male',
+          },
+          minimumAge: {
+            type: Sequelize.INTEGER,
+            allowNull: false,
+            defaultValue: 18,
+          },
+          maximumAge: {
+            type: Sequelize.INTEGER,
+            allowNull: true,
+          },
+          registrationOpeningDate: {
+            type: Sequelize.DATE,
+            allowNull: false,
+            defaultValue: Sequelize.NOW,
+          },
+          registrationClosingDate: {
+            type: Sequelize.DATE,
+            allowNull: false,
+            defaultValue: Sequelize.literal("CURRENT_TIMESTAMP + INTERVAL '30 days'"),
+          },
+          prizePool: {
+            type: Sequelize.INTEGER,
+            allowNull: true,
+          },
+          minimumRegistrationRequired: {
+            type: Sequelize.INTEGER,
+            allowNull: true,
+          },
+          maximumRegistration: {
+            type: Sequelize.INTEGER,
+            allowNull: false,
+          },
+          createdAt: {
+            type: Sequelize.DATE,
+            allowNull: false,
+            defaultValue: Sequelize.NOW,
+          },
+          updatedAt: {
+            type: Sequelize.DATE,
+            allowNull: false,
+            defaultValue: Sequelize.NOW,
+          },
         },
-        onUpdate: 'CASCADE',
-        onDelete: 'RESTRICT',
-      },
+        { transaction: t }
+      );
 
-      tournamentName: {
-        type: Sequelize.STRING(100),
-        allowNull: false,
-      },
+      // Index: club ke saare tournaments jaldi milein
+      await queryInterface.addIndex('Tournaments', ['clubId'], {
+        name: 'tournaments_club_id_idx',
+        transaction: t,
+      });
 
-      registrationAmount: {
-        type: Sequelize.INTEGER,
-        allowNull: false,
-        defaultValue: 0,
-      },
-	  venueName: {
-        type: Sequelize.STRING(400),
-        allowNull: false,
-      },
+      // ---------- CHECK constraints ----------
+      const checks = [
+        {
+          name: 'tournaments_name_length_check',
+          fields: ['tournamentName'],
+          where: 'char_length(trim("tournamentName")) BETWEEN 4 AND 100',
+        },
+        {
+          name: 'tournaments_venue_name_length_check',
+          fields: ['venueName'],
+          where: 'char_length(trim("venueName")) BETWEEN 4 AND 100',
+        },
+        {
+          name: 'tournaments_venue_address_length_check',
+          fields: ['venueAddress'],
+          where: 'char_length(trim("venueAddress")) BETWEEN 10 AND 400',
+        },
+        {
+          name: 'tournaments_registration_amount_check',
+          fields: ['registrationAmount'],
+          where: '"registrationAmount" >= 0',
+        },
+        {
+          name: 'tournaments_tables_check',
+          fields: ['tables'],
+          where: '"tables" IS NULL OR "tables" >= 1',
+        },
+        {
+          name: 'tournaments_minimum_age_check',
+          fields: ['minimumAge'],
+          where: '"minimumAge" >= 0',
+        },
+        {
+          name: 'tournaments_maximum_age_check',
+          fields: ['maximumAge'],
+          where: '"maximumAge" IS NULL OR "maximumAge" >= "minimumAge"',
+        },
+        {
+          name: 'tournaments_registration_dates_check',
+          fields: ['registrationClosingDate'],
+          where: '"registrationClosingDate" > "registrationOpeningDate"',
+        },
+        {
+          name: 'tournaments_prize_pool_check',
+          fields: ['prizePool'],
+          where: '"prizePool" IS NULL OR "prizePool" >= 0',
+        },
+        {
+          name: 'tournaments_minimum_registration_required_check',
+          fields: ['minimumRegistrationRequired'],
+          where: '"minimumRegistrationRequired" IS NULL OR "minimumRegistrationRequired" >= 0',
+        },
+        {
+          name: 'tournaments_maximum_registration_check',
+          fields: ['maximumRegistration'],
+          where: '"maximumRegistration" >= 2',
+        },
+        {
+          // min registration kabhi max se zyada na ho
+          name: 'tournaments_min_not_above_max_registration_check',
+          fields: ['minimumRegistrationRequired'],
+          where: '"minimumRegistrationRequired" IS NULL OR "minimumRegistrationRequired" <= "maximumRegistration"',
+        },
+      ];
 
-      venueAddress: {
-        type: Sequelize.STRING(400),
-        allowNull: false,
-      },
-
-      gender: {
-        type: Sequelize.ENUM('Male', 'Female', 'Others'),
-        allowNull: false,
-        defaultValue: 'Male',
-      },
-
-      minimumAge: {
-        type: Sequelize.INTEGER,
-        allowNull: false,
-        defaultValue: 18,
-      },
-
-      maximumAge: {
-        type: Sequelize.INTEGER,
-        allowNull: true,
-      },
-
-      registrationOpeningDate: {
-        type: Sequelize.DATE,
-        allowNull: false,
-        defaultValue: Sequelize.NOW,
-      },
-
-      registrationClosingDate: {
-        type: Sequelize.DATE,
-        allowNull: false,
-        defaultValue: Sequelize.literal(
-          "CURRENT_TIMESTAMP + INTERVAL '30 days'"
-        ),
-      },
-      prizePool: {
-        type: Sequelize.INTEGER,
-        allowNull: true, 
-      },
-	  minimumRegistratinRequired:{
-		type:Sequelize.INTEGER,
-		allowNull:true,
-	  },
-
-    });
-
-    // Tournament name: 4 to 100 characters
-    await queryInterface.addConstraint('Tournaments', {
-      fields: ['tournamentName'],
-      type: 'check',
-      where: Sequelize.literal(
-        'char_length("tournamentName") BETWEEN 4 AND 100'
-      ),
-      name: 'tournaments_name_length_check',
-    });
-
-    // Registration amount cannot be negative
-    await queryInterface.addConstraint('Tournaments', {
-      fields: ['registrationAmount'],
-      type: 'check',
-      where: Sequelize.literal('"registrationAmount" >= 0'),
-      name: 'tournaments_registration_amount_check',
-    });
-	//venue must contain atleast 4 character
-	await queryInterface.addConstraint('Tournaments',{
-		fields:['venueName'],
-		type:'check',
-		where:Sequelize.literal('char_length("venueName")Between 4 AND 100'),
-		name:'tournaments_venue_name_length_check',
-	})
-    // Venue must contain at least 10 characters
-    await queryInterface.addConstraint('Tournaments', {
-      fields: ['venueAddress'],
-      type: 'check',
-      where: Sequelize.literal(
-        'char_length("venueAddress") BETWEEN 10 AND 400'
-      ),
-      name: 'tournaments_venue_address_length_check',
-    });
-
-    // Minimum age cannot be negative
-    await queryInterface.addConstraint('Tournaments', {
-      fields: ['minimumAge'],
-      type: 'check',
-      where: Sequelize.literal('"minimumAge" >= 0'),
-      name: 'tournaments_minimum_age_check',
-    });
-
-    // Maximum age must be greater than or equal to minimum age
-    await queryInterface.addConstraint('Tournaments', {
-      fields: ['maximumAge'],
-      type: 'check',
-      where: Sequelize.literal(
-        '"maximumAge" IS NULL OR "maximumAge" >= "minimumAge"'
-      ),
-      name: 'tournaments_maximum_age_check',
-    });
-
-    // Closing date must be after opening date
-    await queryInterface.addConstraint('Tournaments', {
-      fields: ['registrationClosingDate'],
-      type: 'check',
-      where: Sequelize.literal(
-        '"registrationClosingDate" > "registrationOpeningDate"'
-      ),
-      name: 'tournaments_registration_dates_check',
-    });
-
-    // Prize pool cannot be negative
-    await queryInterface.addConstraint('Tournaments', {
-      fields: ['prizePool'],
-      type: 'check',
-      where: Sequelize.literal(
-        '"prizePool" IS NULL OR "prizePool" >= 0'
-      ),
-      name: 'tournaments_prize_pool_check',
+      for (const c of checks) {
+        await queryInterface.addConstraint('Tournaments', {
+          fields: c.fields,
+          type: 'check',
+          where: Sequelize.literal(c.where),
+          name: c.name,
+          transaction: t,
+        });
+      }
     });
   },
 
-  async down(queryInterface, Sequelize) {
-    await queryInterface.dropTable('Tournaments');
+  async down(queryInterface) {
+    await queryInterface.sequelize.transaction(async (t) => {
+      await queryInterface.dropTable('Tournaments', { transaction: t });
+      // Postgres mein ENUM type alag se hatana padta hai
+      await queryInterface.sequelize.query(
+        'DROP TYPE IF EXISTS "enum_Tournaments_gender";',
+        { transaction: t }
+      );
+    });
   },
 };

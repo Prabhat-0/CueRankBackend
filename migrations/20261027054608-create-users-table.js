@@ -67,6 +67,7 @@ module.exports = {
                 defaultValue: Sequelize.fn('NOW')
             }
         });
+        await queryInterface.addColumns()
     },
 
     async down(queryInterface, Sequelize) {
