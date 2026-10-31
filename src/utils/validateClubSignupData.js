@@ -9,7 +9,6 @@ const LIMITS = {
     fullName: { min: 2, max: 100 },
     email: { max: 200 },
 };
-
 const isString = (v) => typeof v === 'string';
 
 const validateClubSignUpData = (body = {}) => {

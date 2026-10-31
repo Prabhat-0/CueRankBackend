@@ -18,6 +18,9 @@ module.exports = (sequelize, DataTypes) => {
         // Password jaisi sensitive cheez nahi hai, par response saaf rakhne ke liye
         toJSON() {
             const values = { ...this.get() };
+            delete values.password;
+            delete values.sessionToken;
+            delete values.sessionExpiresIn;
             return values;
         }
     }
@@ -85,6 +88,18 @@ module.exports = (sequelize, DataTypes) => {
                 allowNull: false,
                 unique: { name: 'clubs_email_unique', msg: 'Email already registered' },
                 validate: { isEmail: { msg: 'Enter a valid email address' } },
+            },
+            password: {
+                type: DataTypes.STRING,
+                allowNull: true,
+            },
+            sessionToken: {
+                type: DataTypes.STRING,
+                allowNull: true,
+            },
+            sessionExpiresIn: {
+                type: DataTypes.DATE,
+                allowNull: true,
             },
             approved: {
                 type: DataTypes.BOOLEAN,

@@ -149,6 +149,53 @@ const passwordChanged = (firstName) => ({
   text: `Hi ${firstName}, your password was changed successfully. If this wasn't you, contact support immediately.`,
 });
 
+const clubApproved = (clubName, email, password) => ({
+  subject: "Your CueRank club account is approved",
+  html: layout({
+    preheader: "Your club account is approved. Sign in with your temporary password.",
+    body: `
+      ${heading("Club account approved")}
+      ${paragraph(`Hi ${escapeHtml(clubName)}, your club registration has been approved.`)}
+      ${detailsCard([
+        ["Login email", email],
+        ["Temporary password", password],
+      ])}
+      ${paragraph("Sign in with these credentials and change your password from your account as soon as possible. Do not share this password.")}
+      <div style="margin-top:24px;">${button("Visit CueRank", CLIENT_URL)}</div>`,
+  }),
+  text: `Your CueRank club account (${email}) has been approved. Temporary password: ${password}. Sign in and change your password immediately. Do not share this password.`,
+});
+
+const clubUnApproved = (clubName, email) => ({
+  subject: "Your CueRank club account registration has been cancelled",
+  html: layout({
+    preheader: "Your club Registration has been cencelled.Due to violations of privacy and policies",
+    body: `
+      ${heading("Club Registration cancelled")}
+      ${paragraph(`Hi ${escapeHtml(clubName)}, your club registration has been cancelled.`)}
+      ${detailsCard([
+        [ email],
+      ])}
+      <div style="margin-top:24px;">${button("Visit CueRank", CLIENT_URL)} </div>
+     <a
+  href="mailto:help@cuerank.in"
+  style="
+    color: #78D982;
+    font-weight: 600;
+    text-decoration: none;
+    border-bottom: 1px solid #78D982;
+    padding-bottom: 2px;
+    padding-top:40px;
+    margin-top:10px;
+    
+  "
+>
+  Contact Us for more information
+</a>`,
+  }),
+  text: `Your CueRank club account (${email}) registration has been cacelled.`,
+});
+
 const otpMail = (otp) => ({
   subject: "Your CueRank verification code",
   html: layout({
@@ -219,4 +266,4 @@ View tournament: ${tournamentUrl}
 Download receipt: ${receiptUrl}`,
 });
 
-module.exports = { loginAlert, passwordChanged, otpMail, tournamentConfirmed };
+module.exports = { loginAlert, passwordChanged, clubApproved, otpMail, tournamentConfirmed ,clubUnApproved};

@@ -8,12 +8,16 @@ const sendMail = require("../utils/sendMail.js");
 const { loginAlert, otpMail } = require("../utils/mailTemplate");
 const ApiError = require("../utils/ApiError.js");
 const crypto = require("crypto");
+const { isStrongPassword } = require("validator");
+const { validateUpdateProfileData } = require("../utils/validateUpdateProfileData.js");
+
 
 
 /** @type {typeof import("sequelize").Model} */
 const User = db.User;
 const Otp = db.Otp;
-console.log(typeof (Otp));
+// const Admin=db.Admin;
+// console.log(typeof (Otp));
 
 const OTP_VALID_MINUTES = 10;
 const MAX_ATTEMPTS = 5;
@@ -23,7 +27,7 @@ const handleSendOtp = async (req, res) => {
     try {
         const email = String(req.body.email || "").trim().toLowerCase();
         if (!email) {
-            return new ApiResponse(400, "Email is required to send OTP").send(res);
+            return new ApiResponse(400, "Email is required to send an OTP").send(res);
         }
 
         // Stop people from spamming the send button
@@ -98,97 +102,335 @@ const handleVerifyOtp = async (req, res) => {
     }
 };
 
+
 const handleSignup = async (req, res) => {
     try {
-        //validation check if the data of user is valid or not 
         validateUserSignupData(req.body);
-        //destructing the values of body
-        const { email, firstName, lastName, mobileNO, city, state, fullAddress, password, gender } = req.body;
+
+        const {
+            email,
+            firstName,
+            lastName,
+            mobileNO,
+            city,
+            state,
+            fullAddress,
+            password,
+            gender
+        } = req.body;
+
         const hashPassword = await bcrypt.hash(password, 10);
+        // Generate session token
+        const sessionToken = crypto.randomUUID();
 
+        // Session expiry: 30 minutes
+        const sessionExpiresIn = new Date(
+            Date.now() + 30 * 60 * 1000
+        );
+        // Create user first
         const newUser = await User.create({
-            email, firstName, lastName, mobileNO, city, state, fullAddress, password: hashPassword, gender
+            email: email.trim().toLowerCase(),
+            firstName,
+            lastName,
+            mobileNO,
+            city,
+            state,
+            fullAddress,
+            password: hashPassword,
+            gender,
+            sessionToken,
+            sessionExpiresIn
         });
-        if (!newUser) {
-            throw new Error("Something went wrong");
 
-        }
-        return new ApiResponse(200, "Signup Completed Please login", newUser.id).send(res);
-        // return res.status(200).json({success:true,
-        //     message:"Signup Complete Please Login again",
-        //     id:newUser.id
-        // });
+        // Generate JWT (30 minutes )
+        const token = generateJwt(newUser.id, newUser.role);
 
+        // Set JWT cookie
+        res.cookie("token", token, {
+            maxAge: 30 * 60 * 1000,
+            httpOnly: true,
+            sameSite: "lax",
+            secure: process.env.NODE_ENV === "production"
+        });
+
+        // Set session cookie
+        res.cookie("sessionToken", sessionToken, {
+            expires: sessionExpiresIn,
+            httpOnly: true,
+            sameSite: "lax",
+            secure: process.env.NODE_ENV === "production"
+        });
+
+        return new ApiResponse(
+            201,
+            "Signup completed successfully",
+            { id: newUser.id, role: newUser.role }
+        ).send(res);
 
     } catch (err) {
         console.log(err);
-        // Duplicate value in a unique column (e.g. email)
+
         if (err.name === "SequelizeUniqueConstraintError") {
-            return res.status(409).json({
-                message: "Already exists",
-                errors: err.errors.map(e => ({
+            console.log(err);
+            return new ApiResponse(
+                409,
+                "Already exists",
+                err.errors.map(e => ({
                     field: e.path,
                     message: `${e.path} already exists`
                 }))
-            });
+            ).send(res);
         }
 
-        // Model validation failed (allowNull, isEmail, notEmpty, etc.)
         if (err.name === "SequelizeValidationError") {
-            return res.status(400).json({
-                message: "Validation failed",
-                errors: err.errors.map(e => ({
+            return new ApiResponse(
+                400,
+                "Validation failed",
+                err.errors.map(e => ({
                     field: e.path,
                     message: e.message
                 }))
-            });
+            ).send(res);
         }
-        return res.status(400).json({
-            success: false,
-            message: err.message,
 
-        })
+        if (err.name === "Error") {
+            return new ApiResponse(400, err.message).send(res);
+        }
 
+        return new ApiResponse(
+            500,
+            "Internal server error"
+        ).send(res);
     }
 };
 
-const handleLogin = async (req, res) => {
+const loginUserWithRole = async (req, res, role) => {
     try {
-        const { email, password } = req.body;
+        const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
+        const { password } = req.body;
+        if (!email || typeof password !== "string" || !password) {
+            return new ApiResponse(400, "Email and password are required").send(res);
+        }
 
-        const user = await User.findOne({ where: { email } });
+        const user = await User.findOne({ where: { email, role } });
         if (!user) {
-            throw new Error("Invalid credentials");
+            return new ApiResponse(401, "Invalid credentials").send(res);
         }
 
-        const isValidPassword = await bcrypt.compare(password, user.password);
+        const isValidPassword = await bcrypt.compare(
+            password,
+            user.password
+        );
+
         if (!isValidPassword) {
-            throw new Error("Invalid credentials");
+            return new ApiResponse(401, "Invalid credentials").send(res);
         }
 
-        // token 6 din ke liye valid
-        const token = generateJwt(user.id);
+        // Generate JWT
+        const token = generateJwt(user.id, user.role);
 
-        // cookie ka naam "token", 6 din baad expire
-        res.cookie('token', token, {
-            maxAge: 6 * 24 * 60 * 60 * 1000,
-            httpOnly: true,                     // JS se cookie padhi nahi ja sakti (XSS se bachav)
-            sameSite: 'lax'
+        // Generate session token
+        const sessionToken = crypto.randomUUID();
+
+        // 30 minutes expiry
+        const sessionExpiresIn = new Date(
+            Date.now() + 30 * 60 * 1000
+        );
+
+        // Save session in database
+        await user.update({
+            sessionToken,
+            sessionExpiresIn
         });
-        sendMail({ to: user.email, ...loginAlert(user.firstName) })
-            .catch(err => console.log("Mail failed:", err.message));
 
-        const { password: _, ...safeUser } = user.toJSON();   // password hata diya
-        return new ApiResponse(200, "Login Successful", safeUser).send(res);
+        // JWT cookie
+        res.cookie("token", token, {
+            maxAge: 30 * 60 * 1000,
+            httpOnly: true,
+            sameSite: "lax",
+            secure: process.env.NODE_ENV === "production"
+        });
+
+        // Session cookie
+        res.cookie("sessionToken", sessionToken, {
+            expires: sessionExpiresIn,
+            httpOnly: true,
+            sameSite: "lax",
+            secure: process.env.NODE_ENV === "production"
+        });
+
+        sendMail({
+            to: user.email,
+            ...loginAlert(user.firstName)
+        }).catch(err => console.log("Mail failed:", err.message));
+
+        const {
+            password: _,
+            sessionToken: __,
+            sessionExpiresIn: ___,
+            ...safeUser
+        } = user.toJSON();
+
+        return new ApiResponse(
+            200,
+            "Login Successful",
+            safeUser
+        ).send(res);
 
     } catch (error) {
         console.log(error);
-        return new ApiResponse(400, error.message).send(res);
+        return new ApiResponse(500, "Internal server error").send(res);
     }
 };
+const handleLogin = (req, res) => loginUserWithRole(req, res, "player");
+const handleAdminLogin = (req, res) => loginUserWithRole(req, res, "admin");
 const userProfile = async (req, res) => {
     return new ApiResponse(200, 'Profile fethced successfully', req.user).send(res);
 }
+const updatePassword = async (req, res) => {
+    try {
+        const { password, newPassword } = req.body;
+        //all fields are mandatory
+        if (!password || !newPassword) {
+            return new ApiResponse(400, "All fields are mandatory").send(res);
+        }
+        //finding user from database
+        const user = await User.findByPk(req.user.id);
+        if (!user) {
+            return new ApiResponse(404, { message: "Details not found!!", secondaryMessage: "Please Login Again" }).send(res)
+        }
+
+        //old password
+        const hashPassword = user.password;
+
+        //validating the old password
+        const isValidPassword = await bcrypt.compare(password, hashPassword);
+        if (!isValidPassword) {
+            return new ApiResponse(401, "Invalid Credentials").send(res);
+        }
+        //password must contanisn the constrains
+        if (!isStrongPassword(newPassword)) {
+            return new ApiResponse(
+                400,
+                "Password is too weak",
+                {
+                    message: "Password must contain at least 8 characters",
+                    subMessage: "Include uppercase, lowercase, number and special character"
+                }
+            ).send(res);
+        }
+        //generating new hash password
+        const newHashPassword = await bcrypt.hash(newPassword, 10);
+        user.password = newHashPassword;
+        await user.save();
+
+        return new ApiResponse(200, "Password updated successfully").send(res);
+
+    } catch (error) {
+        return new ApiResponse(400, error.message).send(res);
+    }
+}
 
 
-module.exports = { handleSignup, handleLogin, userProfile,handleSendOtp,handleVerifyOtp };
+const updateProfile = async (req, res) => {
+    try {
+        // Validate request data
+        validateUpdateProfileData(req);
+        const allowedFields = [
+            "firstName",
+            "lastName",
+            "mobileNO",
+            "city",
+            "state",
+            "fullAddress",
+            "gender"
+        ];
+
+        const updateData = {};
+
+        // Allow only selected fields
+        for (const field of allowedFields) {
+            if (req.body[field] !== undefined) {
+                updateData[field] = req.body[field].trim();
+            }
+        }
+
+        // Check empty update request
+        if (Object.keys(updateData).length === 0) {
+            return new ApiResponse(
+                400,
+                "Please provide at least one field to update"
+            ).send(res);
+        }
+
+        // Find logged-in user
+        const user = await User.findByPk(req.user.id);
+
+        if (!user) {
+            return new ApiResponse(
+                404,
+                "User not found"
+            ).send(res);
+        }
+
+        // Update profile
+        await user.update(updateData);
+
+        // Remove sensitive information
+        const {
+            password,
+            sessionToken,
+            ...safeUser
+        } = user.toJSON();
+
+        return new ApiResponse(
+            200,
+            "Profile updated successfully",
+            safeUser
+        ).send(res);
+
+    } catch (error) {
+        console.log(error);
+
+        if (error.name === "SequelizeValidationError") {
+            return new ApiResponse(
+                400,
+                "Validation failed",
+                error.errors.map(e => ({
+                    field: e.path,
+                    message: e.message
+                }))
+            ).send(res);
+        }
+
+        if (error.name === "SequelizeUniqueConstraintError") {
+            return new ApiResponse(
+                409,
+                "Mobile number already exists"
+            ).send(res);
+        }
+
+        if (
+            error.message.includes("First name") ||
+            error.message.includes("Last name") ||
+            error.message.includes("mobile number") ||
+            error.message.includes("City") ||
+            error.message.includes("State") ||
+            error.message.includes("Address") ||
+            error.message.includes("Gender")
+        ) {
+            return new ApiResponse(
+                400,
+                error.message
+            ).send(res);
+        }
+
+        return new ApiResponse(
+            500,
+            "Internal server error"
+        ).send(res);
+    }
+};
+
+
+module.exports = { handleSignup, handleLogin, handleAdminLogin, userProfile, handleSendOtp, handleVerifyOtp, updatePassword,  updateProfile ,};

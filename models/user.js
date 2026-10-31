@@ -45,9 +45,22 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING,
       allowNull: false
     },
+    role: {
+      type: DataTypes.ENUM('player', 'admin'),
+      allowNull: false,
+      defaultValue: 'player'
+    },
     gender: {
       type: DataTypes.ENUM("Male", "Female", "Others"),
       allowNull: false
+    },
+    sessionToken:{
+      type:DataTypes.STRING,
+      allowNull:false,
+    },
+    sessionExpiresIn:{
+      type:DataTypes.DATE,
+      allowNull:false,
     }
   }, {
     sequelize,

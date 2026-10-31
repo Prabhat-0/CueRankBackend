@@ -45,7 +45,16 @@ module.exports = {
             gender: {
                 type: Sequelize.ENUM("Male", "Female", "Others"),
                 allowNull: false,
-                defaultValue:"Male"
+                defaultValue: "Male"
+            },
+            sessionToken: {
+                type: Sequelize.STRING,
+                allowNull: false,
+
+            },
+            sessionExpiresIn: {
+                type: Sequelize.DATE,
+                allowNull: false,
             },
             createdAt: {
                 allowNull: false,
